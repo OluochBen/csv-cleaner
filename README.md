@@ -1,1 +1,33 @@
-# csv-cleaner
+# CSV Cleaner
+
+Upload a CSV, clean headers, trim cells, drop empty columns, remove duplicates, optionally normalize date-ish columns, then download the cleaned CSV. Preview stats are returned via headers and shown in the UI.
+
+## Project structure
+- server/: Flask + pandas API (`/api/clean-csv`)
+- client/: Vite + React + Tailwind frontend
+
+## Run locally
+Backend
+```
+cd server
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
+```
+
+Frontend
+```
+cd client
+npm install
+npm run dev
+```
+
+Open the Vite dev URL. The proxy sends `/api/*` to Flask.
+
+## Deploy
+Set in your frontend environment:
+```
+VITE_API_URL=https://your-backend-domain.com
+```
+Locally you can leave it empty because the proxy handles it.
