@@ -1,0 +1,17 @@
+# General
+.DS_Store
+.env
+*.log
+
+# Python
+server/.venv/
+server/__pycache__/
+server/.pytest_cache/
+
+# Node / Frontend
+client/node_modules/
+client/.vite/
+client/dist/
+
+# Build artifacts
+*.pyc
