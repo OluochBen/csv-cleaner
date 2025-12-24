@@ -31,3 +31,16 @@ Set in your frontend environment:
 VITE_API_URL=https://your-backend-domain.com
 ```
 Locally you can leave it empty because the proxy handles it.
+
+## Docker (local)
+- Build & run both services:
+  ```
+  docker compose up --build
+  ```
+  Frontend: http://localhost:4173 (Nginx serving built assets, proxying `/api` to backend). Backend: http://localhost:5000.
+- Just backend image:
+  ```
+  cd server
+  docker build -t csv-cleaner-backend .
+  docker run -p 5000:5000 csv-cleaner-backend
+  ```
