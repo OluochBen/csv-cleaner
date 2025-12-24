@@ -320,7 +320,9 @@ export default function CsvCleaner() {
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-semibold text-slate-900">Preview changes</div>
                     <div className="text-xs text-slate-500">
-                      {stats.originalRows.toLocaleString()} -> {stats.outputRows.toLocaleString()} rows
+                      {stats.originalRows.toLocaleString()}
+                      {" -> "}
+                      {stats.outputRows.toLocaleString()} rows
                     </div>
                   </div>
 
@@ -342,7 +344,9 @@ export default function CsvCleaner() {
                     <div className="rounded-xl bg-slate-50 p-3">
                       <div className="text-xs text-slate-500">Columns</div>
                       <div className="text-lg font-semibold text-slate-900">
-                        {stats.originalCols} -> {stats.outputCols}
+                        {stats.originalCols}
+                        {" -> "}
+                        {stats.outputCols}
                       </div>
                     </div>
 
