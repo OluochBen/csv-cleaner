@@ -90,14 +90,24 @@ def clean_csv():
         return jsonify(error="Missing file"), 400
 
     f = request.files["file"]
-    if not f.filename or not f.filename.lower().endswith(".csv"):
-        return jsonify(error="Please upload a .csv file"), 400
+    if not f.filename or not f.filename.lower().endswith((".csv", ".tsv")):
+        return jsonify(error="Please upload a .csv or .tsv file"), 400
 
     try:
         text = f.read().decode("utf-8-sig")
-        raw_headers = next(csv.reader(io.StringIO(text)))
+        delimiter = request.form.get("delimiter", "auto")
+        if delimiter == "auto":
+            if f.filename.lower().endswith(".tsv"):
+                delimiter = "\t"
+            else:
+                # Match the client's first-record detection and ignore quoted separators.
+                delimiter = max((",", ";", "\t"), key=lambda sep: len(
+                    next(csv.reader(io.StringIO(text), delimiter=sep))))
+        if delimiter not in (",", ";", "\t"):
+            return jsonify(error="Choose comma, semicolon, tab, or automatic detection."), 400
+        raw_headers = next(csv.reader(io.StringIO(text), delimiter=delimiter))
         # Read values as text so phone numbers, IDs and literal NA remain intact.
-        df = pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
+        df = pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False, sep=delimiter)
         if len(raw_headers) != len(df.columns):
             raise ValueError("Invalid header width")
         df.columns = raw_headers
@@ -162,9 +172,10 @@ def clean_csv():
     # write output CSV
     buf = io.StringIO()
     df.to_csv(buf, index=False)
+    out_name = "cleaned_" + re.sub(r"[.](csv|tsv)$", "", f.filename, flags=re.I) + ".csv"
     if request.form.get("preview", "false").lower() == "true":
         return jsonify(
-            csv=buf.getvalue(), filename=f"cleaned_{f.filename}",
+            csv=buf.getvalue(), filename=out_name,
             before=before_preview,
             after={"columns": list(df.columns), "rows": df.head(10).values.tolist()},
             stats={"originalRows": original_rows, "originalCols": original_cols,
@@ -175,7 +186,6 @@ def clean_csv():
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
     mem.seek(0)
 
-    out_name = f"cleaned_{f.filename}"
     resp = send_file(mem, mimetype="text/csv", as_attachment=True, download_name=out_name)
 
     # preview stats in headers

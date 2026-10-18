@@ -60,3 +60,6 @@ cd client && npm ci && npm run build
 
 ## Preview and controls
 Choose header standardization, trimming, empty-column removal and duplicate removal independently. Date normalization remains off by default. Select **Clean & preview** to compare the first 10 original and cleaned rows, then download the complete result. Changing options clears the previous result. The API retains CSV responses by default; `preview=true` returns JSON with before/after samples, statistics and the full cleaned CSV.
+
+## Supported separators
+Import UTF-8 `.csv` and `.tsv` files. Comma, semicolon and tab separators are detected from the header record; quoted separators do not count. A File separator selector lets you override detection. TSV files default to tabs. Every download is a comma-separated `.csv` file. Excel `.xlsx` workbooks are not supported.

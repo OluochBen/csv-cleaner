@@ -75,6 +75,26 @@ class CleaningTests(unittest.TestCase):
         self.assertEqual(r.json['after']['columns'], ['Name', 'Name'])
         self.assertEqual(r.json['after']['rows'], [['Alice', 'Bob']])
 
+    def test_semicolon_detection_with_quoted_commas(self):
+        r = self.clean('Name;Note;ID\nAlice;"hello, world";001\n', preview='true')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json['after']['rows'], [['Alice', 'hello, world', '001']])
+
+    def test_tab_separated_upload_downloads_as_csv(self):
+        r = self.client.post('/api/clean-csv', data={
+            'file': (io.BytesIO(b'Name\tID\nAlice\t001\n'), 'report.tsv'), 'preview': 'true',
+        }, content_type='multipart/form-data')
+        self.assertEqual(r.json['csv'], 'name,id\nAlice,001\n')
+        self.assertEqual(r.json['filename'], 'cleaned_report.csv')
+
+    def test_explicit_separator_overrides_detection(self):
+        r = self.clean('Name;ID\nAlice;001\n', delimiter=',', preview='true')
+        self.assertEqual(len(r.json['before']['columns']), 1)
+
+    def test_invalid_separator_returns_error(self):
+        r = self.clean('Name,ID\nAlice,001\n', delimiter='|')
+        self.assertEqual(r.status_code, 400)
+
     def test_upload_limit_returns_json(self):
         old = app.config['MAX_CONTENT_LENGTH']
         try:
