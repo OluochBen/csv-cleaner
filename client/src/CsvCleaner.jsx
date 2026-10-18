@@ -25,8 +25,23 @@ function cleanHeader(h) {
 }
 
 // Parse the first CSV record, including escaped quotes and quoted newlines.
-async function readCsvHeaders(file) {
+async function readCsvHeaders(file, requestedDelimiter = "auto") {
   const text = (await file.slice(0, 1024 * 1024).text()).replace(/^\uFEFF/, "");
+  let delimiter = requestedDelimiter;
+  if (delimiter === "auto") {
+    const counts = { ",": 0, ";": 0, "\t": 0 };
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '"') {
+        if (inQuotes && text[i + 1] === '"') i++;
+        else inQuotes = !inQuotes;
+      } else if (!inQuotes) {
+        if (text[i] === "\n" || text[i] === "\r") break;
+        if (text[i] in counts) counts[text[i]]++;
+      }
+    }
+    delimiter = file.name?.toLowerCase().endsWith(".tsv") ? "\t" : Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+  }
   const raw = [];
   let value = "", quoted = false, ended = false;
   for (let i = 0; i < text.length; i++) {
@@ -34,7 +49,7 @@ async function readCsvHeaders(file) {
     if (c === '"') {
       if (quoted && text[i + 1] === '"') { value += '"'; i++; }
       else quoted = !quoted;
-    } else if (c === "," && !quoted) { raw.push(value); value = ""; }
+    } else if (c === delimiter && !quoted) { raw.push(value); value = ""; }
     else if ((c === "\n" || c === "\r") && !quoted) { ended = true; break; }
     else value += c;
   }
@@ -64,6 +79,7 @@ export default function CsvCleaner() {
   const [dragging, setDragging] = useState(false);
 
   const [options, setOptions] = useState({ clean_headers: true, trim_cells: true, drop_empty_columns: true, remove_duplicates: true });
+  const [delimiter, setDelimiter] = useState("auto");
   const [preview, setPreview] = useState(null);
   const invalidate = () => { setDownloadUrl(""); setStats(null); setPreview(null); };
   const [loading, setLoading] = useState(false);
@@ -75,7 +91,7 @@ export default function CsvCleaner() {
   useEffect(() => () => { if (downloadUrl) URL.revokeObjectURL(downloadUrl); }, [downloadUrl]);
   const selectedList = useMemo(() => Array.from(selected), [selected]);
 
-  const pickFile = async (f) => {
+  const pickFile = async (f, nextDelimiter = delimiter) => {
     if (!f || loading) return;
     const version = ++pickVersion.current;
     setFile(null);
@@ -89,8 +105,8 @@ export default function CsvCleaner() {
     if (!f.size) return setError("This file is empty. Choose a CSV with data.");
     if (f.size > 20 * 1024 * 1024) return setError("Maximum file size is 20 MB.");
 
-    if (!f.name.toLowerCase().endsWith(".csv")) {
-      setError("Please upload a .csv file.");
+    if (!/\.(csv|tsv)$/i.test(f.name)) {
+      setError("Please upload a .csv or .tsv file.");
       return;
     }
 
@@ -98,7 +114,7 @@ export default function CsvCleaner() {
     setSelected(new Set());
 
     try {
-      const h = await readCsvHeaders(f);
+      const h = await readCsvHeaders(f, nextDelimiter);
       if (version === pickVersion.current) setHeaders(h);
     } catch {
       if (version === pickVersion.current) setHeaders([]);
@@ -130,6 +146,7 @@ export default function CsvCleaner() {
       if (selectedList.length) form.append("dedupe_cols", selectedList.join(","));
       form.append("normalize_dates", String(normalizeDates));
       form.append("preview", "true");
+      form.append("delimiter", delimiter);
       Object.entries(options).forEach(([key, value]) => form.append(key, String(value)));
 
       const res = await fetch(`${API}/api/clean-csv`, {
@@ -209,7 +226,7 @@ export default function CsvCleaner() {
                 <div className="mt-2">
                   <input
                     type="file"
-                    accept=".csv,text/csv"
+                    accept=".csv,.tsv,text/csv,text/tab-separated-values"
                     ref={inputRef}
                     disabled={loading}
                     onChange={(e) => pickFile(e.target.files?.[0])}
@@ -227,7 +244,7 @@ export default function CsvCleaner() {
               </label>
 
               {!file && <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-                <span>UTF-8 CSV · Up to 20 MB</span>
+                <span>UTF-8 CSV / TSV · Up to 20 MB</span>
                 <button className="font-medium text-emerald-700 hover:underline" onClick={() => pickFile(new File(['Name,Email,ID,Empty\n Alice ,alice@example.com,00123, \n Alice ,alice@example.com,00123, \n Bob ,bob@example.com,00456, \n'], 'sample.csv', { type: 'text/csv' }))}>Try a sample CSV →</button>
               </div>}
               {file && (
@@ -246,6 +263,13 @@ export default function CsvCleaner() {
                     </button>
                   </div>
 
+                  <label className="mt-4 block text-sm font-medium text-slate-800">
+                    File separator
+                    <select value={delimiter} disabled={loading} onChange={(e) => { const value = e.target.value; setDelimiter(value); pickFile(file, value); }} className="mt-2 block w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">
+                      <option value="auto">Detect automatically</option><option value=",">Comma (,)</option><option value=";">Semicolon (;)</option><option value={"\t"}>Tab</option>
+                    </select>
+                    <span className="mt-1 block text-xs font-normal text-slate-500">Downloads use standard comma-separated CSV. Choose a separator if automatic detection reads columns incorrectly.</span>
+                  </label>
                   <fieldset disabled={loading} className="mt-4 grid gap-3 sm:grid-cols-2">
                     <legend className="mb-3 text-sm font-semibold text-slate-900">Choose what to clean</legend>
                     {[["clean_headers", "Standardize headers", "Use unique lowercase names with underscores."], ["trim_cells", "Trim cell whitespace", "Remove spaces around values."], ["drop_empty_columns", "Drop empty columns", "Remove columns with only blank cells."], ["remove_duplicates", "Remove duplicate rows", "Keep the first matching row."]].map(([key, label, help]) => (
