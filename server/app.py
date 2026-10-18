@@ -3,8 +3,15 @@ from flask_cors import CORS
 import pandas as pd
 import io
 import re
+import csv
+from werkzeug.exceptions import RequestEntityTooLarge
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+
+@app.errorhandler(RequestEntityTooLarge)
+def too_large(error):
+    return jsonify(error="File is too large. Maximum upload size is 20 MB."), 413
 
 # Expose custom headers so the frontend can read them (important in production)
 CORS(
@@ -43,13 +50,16 @@ def clean_headers(cols):
         c = re.sub(r"_+", "_", c).strip("_")
         cleaned.append(c or "col")
 
-    # ensure unique
-    seen = {}
+    # Reserve every generated name, including names already ending in a suffix.
+    used = set()
     out = []
-    for c in cleaned:
-        n = seen.get(c, 0)
-        out.append(f"{c}_{n}" if n else c)
-        seen[c] = n + 1
+    for base in cleaned:
+        name, suffix = base, 1
+        while name in used:
+            name = f"{base}_{suffix}"
+            suffix += 1
+        used.add(name)
+        out.append(name)
     return out
 
 def is_likely_date_col(name: str) -> bool:
@@ -57,12 +67,18 @@ def is_likely_date_col(name: str) -> bool:
     return any(h in n for h in DATE_HINTS)
 
 def try_normalize_date_series(s: pd.Series):
-    # Attempt parse; require enough successes to avoid wrecking random text columns
-    parsed = pd.to_datetime(s, errors="coerce", infer_datetime_format=True, utc=False)
-    success_ratio = float(parsed.notna().mean())
-    if success_ratio >= 0.7:
-        return parsed.dt.strftime("%Y-%m-%d")
-    return None
+    # Convert only explicit ISO dates; preserve ambiguous dates and timestamps.
+    # Never replace an unparseable value with an empty cell.
+    converted = s.copy()
+    changed = False
+    for index, value in s.items():
+        if re.fullmatch(r"\d{4}[-/]\d{2}[-/]\d{2}", value):
+            try:
+                converted.at[index] = pd.Timestamp(value).strftime("%Y-%m-%d")
+                changed = True
+            except (ValueError, OverflowError):
+                pass
+    return converted if changed else None
 
 @app.get("/api/health")
 def health():
@@ -78,7 +94,13 @@ def clean_csv():
         return jsonify(error="Please upload a .csv file"), 400
 
     try:
-        df = pd.read_csv(f)
+        text = f.read().decode("utf-8-sig")
+        raw_headers = next(csv.reader(io.StringIO(text)))
+        # Read values as text so phone numbers, IDs and literal NA remain intact.
+        df = pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
+        if len(raw_headers) != len(df.columns):
+            raise ValueError("Invalid header width")
+        df.columns = raw_headers
     except Exception:
         return jsonify(error="Could not read CSV. Is it a valid CSV file?"), 400
 
@@ -89,20 +111,19 @@ def clean_csv():
     # clean headers
     df.columns = clean_headers(df.columns)
 
-    # drop fully empty columns
-    empty_cols_before = int(df.isna().all().sum())
-    df = df.dropna(axis=1, how="all")
-
-    # trim strings
-    for col in df.select_dtypes(include=["object"]).columns:
-        df[col] = df[col].astype(str).str.strip()
+    # Trim before checking for empty columns; whitespace-only cells are empty.
+    for col in df.columns:
+        df[col] = df[col].str.strip()
+    empty_cols = [col for col in df.columns if len(df) > 0 and df[col].eq("").all()]
+    empty_cols_before = len(empty_cols)
+    df = df.drop(columns=empty_cols)
 
     # optional date normalization
     normalize_dates = request.form.get("normalize_dates", "false").lower() == "true"
     normalized_cols = []
     if normalize_dates:
         for col in df.columns:
-            if df[col].dtype == "object" and is_likely_date_col(col):
+            if is_likely_date_col(col):
                 normalized = try_normalize_date_series(df[col])
                 if normalized is not None:
                     df[col] = normalized
@@ -114,10 +135,11 @@ def clean_csv():
 
     if dedupe_cols_raw:
         dedupe_cols = [c.strip() for c in dedupe_cols_raw.split(",") if c.strip()]
-        missing = [c for c in dedupe_cols if c not in df.columns]
+        missing = [c for c in dedupe_cols if c not in df.columns and c not in empty_cols]
+        dedupe_cols = [c for c in dedupe_cols if c in df.columns]
         if missing:
             return jsonify(error=f"Unknown column(s): {', '.join(missing)}"), 400
-        df = df.drop_duplicates(subset=dedupe_cols)
+        df = df.drop_duplicates(subset=dedupe_cols) if dedupe_cols else df.drop_duplicates()
     else:
         df = df.drop_duplicates()
 
@@ -148,4 +170,4 @@ def clean_csv():
     return resp
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)

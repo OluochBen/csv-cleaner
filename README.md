@@ -44,3 +44,16 @@ Locally you can leave it empty because the proxy handles it.
   docker build -t csv-cleaner-backend .
   docker run -p 5000:5000 csv-cleaner-backend
   ```
+
+## Data handling
+- UTF-8 CSV uploads up to 20 MB.
+- Values are read as text to retain leading zeros and literal `NA` values.
+- Whitespace is trimmed before empty columns and duplicate rows are removed.
+- Date conversion is opt-in and only converts year-first dates (`YYYY/MM/DD` or `YYYY-MM-DD`). Ambiguous dates, timestamps and invalid values are preserved.
+- Processing takes place in server memory; the app does not persist uploaded files.
+
+## Checks
+```sh
+python -m unittest discover -s server -v
+cd client && npm ci && npm run build
+```
