@@ -4,6 +4,7 @@ import pandas as pd
 import io
 import re
 import csv
+from datetime import datetime, timezone
 from werkzeug.exceptions import RequestEntityTooLarge
 
 app = Flask(__name__)
@@ -122,12 +123,20 @@ def clean_csv():
     enabled = lambda key: request.form.get(key, "true").lower() == "true"
 
     # Use stable unique internal names for column selection even when labels are kept.
-    df.columns = clean_headers(df.columns)
+    internal_headers = clean_headers(df.columns)
+    header_changes = [{"column": i + 1, "from": raw, "to": clean}
+                      for i, (raw, clean) in enumerate(zip(raw_headers, internal_headers))
+                      if raw != clean] if enabled("clean_headers") else []
+    df.columns = internal_headers
+    labels = dict(zip(internal_headers, raw_headers))
 
     # Trim before checking for empty columns; whitespace-only cells are empty.
+    trimmed_cells = 0
     if enabled("trim_cells"):
         for col in df.columns:
-            df[col] = df[col].str.strip()
+            trimmed = df[col].str.strip()
+            trimmed_cells += int(df[col].ne(trimmed).sum())
+            df[col] = trimmed
     empty_cols = [col for col in df.columns if len(df) > 0 and df[col].str.strip().eq("").all()] if enabled("drop_empty_columns") else []
     empty_cols_before = len(empty_cols)
     df = df.drop(columns=empty_cols)
@@ -135,13 +144,17 @@ def clean_csv():
     # optional date normalization
     normalize_dates = request.form.get("normalize_dates", "false").lower() == "true"
     normalized_cols = []
+    date_cells_changed = 0
     if normalize_dates:
         for col in df.columns:
             if is_likely_date_col(col):
                 normalized = try_normalize_date_series(df[col])
                 if normalized is not None:
-                    df[col] = normalized
-                    normalized_cols.append(col)
+                    changed = int(df[col].ne(normalized).sum())
+                    if changed:
+                        date_cells_changed += changed
+                        df[col] = normalized
+                        normalized_cols.append(col)
 
     # optional dedupe by selected columns
     before_dedupe_rows = int(len(df))
@@ -176,6 +189,22 @@ def clean_csv():
     if request.form.get("preview", "false").lower() == "true":
         return jsonify(
             csv=buf.getvalue(), filename=out_name,
+            report={
+                "file": f.filename, "generatedAt": datetime.now(timezone.utc).isoformat(),
+                "inputSeparator": {",": "comma", ";": "semicolon", "\t": "tab"}[delimiter],
+                "outputSeparator": "comma",
+                "rows": {"before": original_rows, "after": after_rows, "duplicatesRemoved": duplicates_removed},
+                "columns": {"before": original_cols, "after": after_cols},
+                "headerChanges": header_changes,
+                "emptyColumnsRemoved": [{"column": internal_headers.index(col) + 1,
+                                         "name": labels[col]} for col in empty_cols],
+                "cellsTrimmed": trimmed_cells, "dateCellsChanged": date_cells_changed,
+                "dateColumnsChanged": [labels[col] for col in normalized_cols],
+                "options": {key: enabled(key) for key in ("clean_headers", "trim_cells", "drop_empty_columns", "remove_duplicates")},
+                "normalizeDates": normalize_dates,
+                "duplicateKeyColumns": [labels[col] for col in dedupe_cols_raw.split(",") if col in labels] if enabled("remove_duplicates") else [],
+                "countingNote": "Cell-change counts are measured before duplicate rows and empty columns are removed. Counts describe operations, not unique cells.",
+            },
             before=before_preview,
             after={"columns": list(df.columns), "rows": df.head(10).values.tolist()},
             stats={"originalRows": original_rows, "originalCols": original_cols,
