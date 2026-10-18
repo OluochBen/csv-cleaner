@@ -63,6 +63,9 @@ export default function CsvCleaner() {
   const pickVersion = useRef(0);
   const [dragging, setDragging] = useState(false);
 
+  const [options, setOptions] = useState({ clean_headers: true, trim_cells: true, drop_empty_columns: true, remove_duplicates: true });
+  const [preview, setPreview] = useState(null);
+  const invalidate = () => { setDownloadUrl(""); setStats(null); setPreview(null); };
   const [loading, setLoading] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState("");
   const [downloadName, setDownloadName] = useState("");
@@ -81,6 +84,7 @@ export default function CsvCleaner() {
     setError("");
     setDownloadUrl("");
     setStats(null);
+    setPreview(null);
 
     if (!f.size) return setError("This file is empty. Choose a CSV with data.");
     if (f.size > 20 * 1024 * 1024) return setError("Maximum file size is 20 MB.");
@@ -102,6 +106,7 @@ export default function CsvCleaner() {
   };
 
   const toggleCol = (clean) => {
+    invalidate();
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(clean)) next.delete(clean);
@@ -117,12 +122,15 @@ export default function CsvCleaner() {
     setError("");
     setDownloadUrl("");
     setStats(null);
+    setPreview(null);
 
     try {
       const form = new FormData();
       form.append("file", file);
       if (selectedList.length) form.append("dedupe_cols", selectedList.join(","));
       form.append("normalize_dates", String(normalizeDates));
+      form.append("preview", "true");
+      Object.entries(options).forEach(([key, value]) => form.append(key, String(value)));
 
       const res = await fetch(`${API}/api/clean-csv`, {
         method: "POST",
@@ -138,27 +146,12 @@ export default function CsvCleaner() {
         throw new Error(msg);
       }
 
-      // read preview stats from headers
-      const s = {
-        originalRows: Number(res.headers.get("X-Original-Rows") || 0),
-        originalCols: Number(res.headers.get("X-Original-Cols") || 0),
-        outputRows: Number(res.headers.get("X-Output-Rows") || 0),
-        outputCols: Number(res.headers.get("X-Output-Cols") || 0),
-        duplicatesRemoved: Number(res.headers.get("X-Duplicates-Removed") || 0),
-        emptyColsRemoved: Number(res.headers.get("X-Empty-Cols-Removed") || 0),
-        normalizedDateCols: (res.headers.get("X-Normalized-Date-Cols") || "")
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean),
-      };
-      setStats(s);
-
-      const blob = await res.blob();
-
-      // get filename from Content-Disposition
-      const cd = res.headers.get("Content-Disposition") || "";
-      const match = cd.match(/filename="([^"]+)"/);
-      const name = match?.[1] || `cleaned_${file.name}`;
+      const result = await res.json();
+      if (!result.before || !result.after || typeof result.csv !== "string") throw new Error("Preview unavailable. Please try again.");
+      setStats(result.stats);
+      setPreview({ before: result.before, after: result.after });
+      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8" });
+      const name = result.filename || `cleaned_${file.name}`;
 
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
@@ -180,6 +173,7 @@ export default function CsvCleaner() {
     setDownloadName("");
     setError("");
     setStats(null);
+    setPreview(null);
   };
 
   return (
@@ -252,7 +246,16 @@ export default function CsvCleaner() {
                     </button>
                   </div>
 
-                  <div className="mt-4">
+                  <fieldset disabled={loading} className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <legend className="mb-3 text-sm font-semibold text-slate-900">Choose what to clean</legend>
+                    {[["clean_headers", "Standardize headers", "Use unique lowercase names with underscores."], ["trim_cells", "Trim cell whitespace", "Remove spaces around values."], ["drop_empty_columns", "Drop empty columns", "Remove columns with only blank cells."], ["remove_duplicates", "Remove duplicate rows", "Keep the first matching row."]].map(([key, label, help]) => (
+                      <label key={key} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                        <input type="checkbox" checked={options[key]} onChange={(e) => { setOptions({ ...options, [key]: e.target.checked }); invalidate(); }} className="mt-1" />
+                        <span><span className="block font-medium text-slate-800">{label}</span><span className="text-xs text-slate-500">{help}</span></span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  {options.remove_duplicates && <div className="mt-4">
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-medium text-slate-800">
                         Remove duplicates by columns (optional)
@@ -287,8 +290,7 @@ export default function CsvCleaner() {
                         (Couldn't preview headers - you can still clean the file.)
                       </div>
                     )}
-                  </div>
-
+                  </div>}
                   <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
                     <div>
                       <div className="text-sm font-medium text-slate-800">Normalize dates</div>
@@ -302,7 +304,7 @@ export default function CsvCleaner() {
                         disabled={loading}
                         aria-label="Normalize year-first dates"
                         checked={normalizeDates}
-                        onChange={(e) => setNormalizeDates(e.target.checked)}
+                        onChange={(e) => { setNormalizeDates(e.target.checked); invalidate(); }}
                         className="h-4 w-4"
                       />
                       <span className="text-slate-700">{normalizeDates ? "On" : "Off"}</span>
@@ -323,7 +325,7 @@ export default function CsvCleaner() {
                   disabled={loading || !file}
                   className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading ? "Cleaning..." : "Clean CSV"}
+                  {loading ? "Cleaning..." : "Clean & preview"}
                 </button>
 
                 {downloadUrl && (
@@ -342,10 +344,27 @@ export default function CsvCleaner() {
                 <span>Files are processed once and never stored.</span>
               </div>
 
+              {preview && <section aria-label="Before and after preview" className="space-y-4">
+                <p className="text-xs text-slate-500">First 10 rows shown for each version. The download includes every cleaned row. Spaces are preserved in this preview.</p>
+                {[["before", "Original file"], ["after", "Cleaned result"]].map(([key, title]) => (
+                  <div key={key}>
+                    <h2 className="mb-2 text-sm font-semibold text-slate-900">{title}</h2>
+                    <div tabIndex={0} role="region" aria-label={`${title} table, scroll to view all columns`} className="max-h-72 overflow-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-left text-xs">
+                        <caption className="sr-only">{title}, up to ten rows</caption>
+                        <thead className="sticky top-0 bg-slate-100"><tr>{preview[key].columns.map((col, i) => <th key={i} scope="col" className="whitespace-pre border-b border-slate-200 px-3 py-2 font-semibold">{col || "(unnamed)"}</th>)}</tr></thead>
+                        <tbody>{preview[key].rows.map((row, i) => <tr key={i} className="border-b border-slate-100 last:border-0">{row.map((cell, j) => <td key={j} className="whitespace-pre px-3 py-2">{cell === "" ? <span className="italic text-slate-400">empty</span> : cell}</td>)}</tr>)}</tbody>
+                      </table>
+                      {!preview[key].rows.length && <p className="p-3 text-xs text-slate-500">No data rows.</p>}
+                      {!preview[key].columns.length && <p className="p-3 text-xs text-slate-500">All columns were empty. Turn off “Drop empty columns” to retain them.</p>}
+                    </div>
+                  </div>
+                ))}
+              </section>}
               {stats && (
                 <div role="status" className="mt-2 rounded-2xl border border-slate-200 bg-white p-4">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-slate-900">Cleaning complete</div>
+                    <div className="text-sm font-semibold text-slate-900">Review your changes</div>
                     <div className="text-xs text-slate-500">
                       {stats.originalRows.toLocaleString()}
                       {" -> "}
