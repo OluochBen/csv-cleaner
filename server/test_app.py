@@ -48,6 +48,33 @@ class CleaningTests(unittest.TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn('error', r.json)
 
+    def test_disabled_cleaning_preserves_values_headers_and_duplicates(self):
+        text = 'Full Name,ID,Blank\n Alice ,001, \n Alice ,001, \n'
+        r = self.clean(text, clean_headers='false', trim_cells='false',
+                       remove_duplicates='false', drop_empty_columns='false')
+        self.assertEqual(r.text, text)
+
+    def test_preview_matches_download_and_keeps_original_sample(self):
+        text = 'Full Name,ID,Blank\n Alice ,001, \nAlice,001,\n'
+        preview = self.clean(text, preview='true').json
+        download = self.clean(text)
+        self.assertEqual(preview['csv'], download.text)
+        self.assertEqual(preview['before']['rows'][0][0], ' Alice ')
+        self.assertEqual(preview['after']['rows'], [['Alice', '001']])
+        self.assertEqual(preview['stats']['duplicatesRemoved'], 1)
+
+    def test_preview_is_limited_to_ten_rows(self):
+        text = 'ID\n' + ''.join(f'{i}\n' for i in range(25))
+        p = self.clean(text, preview='true').json
+        self.assertEqual(len(p['before']['rows']), 10)
+        self.assertEqual(len(p['after']['rows']), 10)
+        self.assertEqual(p['stats']['outputRows'], 25)
+
+    def test_original_duplicate_labels_can_be_retained(self):
+        r = self.clean('Name,Name\nAlice,Bob\n', clean_headers='false', preview='true')
+        self.assertEqual(r.json['after']['columns'], ['Name', 'Name'])
+        self.assertEqual(r.json['after']['rows'], [['Alice', 'Bob']])
+
     def test_upload_limit_returns_json(self):
         old = app.config['MAX_CONTENT_LENGTH']
         try:
