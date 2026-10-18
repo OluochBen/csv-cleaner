@@ -108,13 +108,17 @@ def clean_csv():
     original_rows = int(len(df))
     original_cols = int(df.shape[1])
 
-    # clean headers
+    before_preview = {"columns": list(df.columns), "rows": df.head(10).values.tolist()}
+    enabled = lambda key: request.form.get(key, "true").lower() == "true"
+
+    # Use stable unique internal names for column selection even when labels are kept.
     df.columns = clean_headers(df.columns)
 
     # Trim before checking for empty columns; whitespace-only cells are empty.
-    for col in df.columns:
-        df[col] = df[col].str.strip()
-    empty_cols = [col for col in df.columns if len(df) > 0 and df[col].eq("").all()]
+    if enabled("trim_cells"):
+        for col in df.columns:
+            df[col] = df[col].str.strip()
+    empty_cols = [col for col in df.columns if len(df) > 0 and df[col].str.strip().eq("").all()] if enabled("drop_empty_columns") else []
     empty_cols_before = len(empty_cols)
     df = df.drop(columns=empty_cols)
 
@@ -133,7 +137,9 @@ def clean_csv():
     before_dedupe_rows = int(len(df))
     dedupe_cols_raw = request.form.get("dedupe_cols", "").strip()
 
-    if dedupe_cols_raw:
+    if not enabled("remove_duplicates"):
+        pass
+    elif dedupe_cols_raw:
         dedupe_cols = [c.strip() for c in dedupe_cols_raw.split(",") if c.strip()]
         missing = [c for c in dedupe_cols if c not in df.columns and c not in empty_cols]
         dedupe_cols = [c for c in dedupe_cols if c in df.columns]
@@ -149,9 +155,23 @@ def clean_csv():
     duplicates_removed = int(before_dedupe_rows - after_rows)
     empty_cols_removed = int(empty_cols_before)
 
+    if not enabled("clean_headers"):
+        labels = dict(zip(clean_headers(raw_headers), raw_headers))
+        df.columns = [labels[col] for col in df.columns]
+
     # write output CSV
     buf = io.StringIO()
     df.to_csv(buf, index=False)
+    if request.form.get("preview", "false").lower() == "true":
+        return jsonify(
+            csv=buf.getvalue(), filename=f"cleaned_{f.filename}",
+            before=before_preview,
+            after={"columns": list(df.columns), "rows": df.head(10).values.tolist()},
+            stats={"originalRows": original_rows, "originalCols": original_cols,
+                   "outputRows": after_rows, "outputCols": after_cols,
+                   "duplicatesRemoved": duplicates_removed, "emptyColsRemoved": empty_cols_removed,
+                   "normalizedDateCols": normalized_cols},
+        )
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
     mem.seek(0)
 
