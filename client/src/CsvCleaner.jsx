@@ -79,6 +79,8 @@ export default function CsvCleaner() {
   const [dragging, setDragging] = useState(false);
 
   const [options, setOptions] = useState({ clean_headers: true, trim_cells: true, drop_empty_columns: true, remove_duplicates: true });
+  const [columnSearch, setColumnSearch] = useState("");
+  const [previewTab, setPreviewTab] = useState("after");
   const [delimiter, setDelimiter] = useState("auto");
   const [preview, setPreview] = useState(null);
   const invalidate = () => { setDownloadUrl(""); setStats(null); setPreview(null); };
@@ -193,253 +195,58 @@ export default function CsvCleaner() {
     setPreview(null);
   };
 
+  const filteredHeaders = headers.filter(({ raw }) => raw.toLowerCase().includes(columnSearch.toLowerCase()));
   return (
-    <main className="csv-cleaner min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
-          <div className="p-6 sm:p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-semibold text-slate-900">CSV Cleaner</h1>
-                <p className="mt-1 text-sm text-slate-600">
-                  Turn messy exports into clean, consistent CSV files. Preview the changes, then download your result.
-                </p>
-                <p className="mt-1 text-xs font-medium uppercase tracking-wide text-emerald-700">
-                  Less spreadsheet cleanup. More useful data.
-                </p>
-                <p className="mt-2 text-xs text-slate-600">
-                  Common uses: Etsy exports · Shopify orders · CRM lists · Lead files
-                </p>
-              </div>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 whitespace-nowrap">
-                Instant Download
-              </span>
-            </div>
-
-            <div className="mt-6 grid gap-4">
-              <label className={`block rounded-2xl border-2 border-dashed p-6 transition-colors ${dragging ? "border-emerald-500 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}
-                onDragOver={(e) => { e.preventDefault(); if (!loading) setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
+    <main className="csv-cleaner workspace">
+      <header className="site-header">
+        <a className="brand" href="/" aria-label="CSV Cleaner home"><span className="brand-icon" aria-hidden="true">▦</span>CSV Cleaner<span className="brand-tag">DATA TOOLS</span></a>
+        <a className="studio-link" href="https://splashmaxcreative.com" target="_blank" rel="noreferrer">By Splashmax Creative ↗</a>
+      </header>
+      <div className="workspace-body">
+        <section className="intro">
+          <div><p className="eyebrow">A LITTLE LESS SPREADSHEET WORK</p><h1>Messy data.<br className="mobile-break" /> Clean start.</h1><p className="intro-copy">Tidy your exports, review every change, and get back to work.</p></div>
+          <div className="intro-note"><span className="status-dot" />No account needed<span>CSV & TSV · Up to 20 MB</span></div>
+        </section>
+        <ol className="step-bar" aria-label="Cleaning progress">
+          {[["Upload", true], ["Configure", !!file], ["Review & download", !!preview]].map(([label, active], i) => <li key={label} className={active ? "active" : ""}><span>{i + 1}</span>{label}</li>)}
+        </ol>
+        <div className="workbench">
+          <aside className="setup-panel" aria-label="Upload and cleaning settings">
+            <section className="panel upload-panel">
+              <div className="panel-heading"><h2><span className="section-number">01</span>Your file</h2>{file && <button className="text-button" onClick={clearAll} disabled={loading}>Remove</button>}</div>
+              <label className={`drop-zone ${dragging ? "is-dragging" : ""} ${file ? "has-file" : ""}`}
+                onDragOver={(e) => { e.preventDefault(); if (!loading) setDragging(true); }} onDragLeave={() => setDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setDragging(false); pickFile(e.dataTransfer.files?.[0]); }}>
-
-                <span className="text-sm font-medium text-slate-800">Drop your CSV here, or choose a file</span>
-                <div className="mt-2">
-                  <input
-                    type="file"
-                    accept=".csv,.tsv,text/csv,text/tab-separated-values"
-                    ref={inputRef}
-                    disabled={loading}
-                    onChange={(e) => pickFile(e.target.files?.[0])}
-                    className="block w-full text-sm file:mr-4 file:rounded-xl file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
-                  />
-                </div>
-                {file && (
-                  <div className="mt-2 text-xs text-slate-600">
-                    <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
-                      <span aria-hidden="true">OK</span>
-                      <span className="truncate">{file.name}</span>
-                    </span>
-                  </div>
-                )}
+                <span className="upload-symbol" aria-hidden="true">{file ? "✓" : "↑"}</span>
+                <strong>{file ? file.name : "Drop a file to get started"}</strong>
+                <span>{file ? `${bytes(file.size)} · ${headers.length} columns detected` : "or browse files on your device"}</span>
+                <input className="file-picker" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" ref={inputRef} disabled={loading} onChange={(e) => pickFile(e.target.files?.[0])} aria-label={file ? "Replace CSV or TSV file" : "Choose CSV or TSV file"} />
+                <span className="browse-button">{file ? "Replace file" : "Choose file"}</span>
               </label>
-
-              {!file && <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-                <span>UTF-8 CSV / TSV · Up to 20 MB</span>
-                <button className="font-medium text-emerald-700 hover:underline" onClick={() => pickFile(new File(['Name,Email,ID,Empty\n Alice ,alice@example.com,00123, \n Alice ,alice@example.com,00123, \n Bob ,bob@example.com,00456, \n'], 'sample.csv', { type: 'text/csv' }))}>Try a sample CSV →</button>
-              </div>}
-              {file && (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">{file.name}</div>
-                      <div className="text-xs text-slate-600">{bytes(file.size)}</div>
-                    </div>
-                    <button
-                      onClick={clearAll}
-                      disabled={loading}
-                      className="text-xs font-medium text-slate-700 hover:text-slate-900"
-                    >
-                      Clear
-                    </button>
-                  </div>
-
-                  <label className="mt-4 block text-sm font-medium text-slate-800">
-                    File separator
-                    <select value={delimiter} disabled={loading} onChange={(e) => { const value = e.target.value; setDelimiter(value); pickFile(file, value); }} className="mt-2 block w-full rounded-lg border border-slate-300 bg-white p-2 text-sm">
-                      <option value="auto">Detect automatically</option><option value=",">Comma (,)</option><option value=";">Semicolon (;)</option><option value={"\t"}>Tab</option>
-                    </select>
-                    <span className="mt-1 block text-xs font-normal text-slate-500">Downloads use standard comma-separated CSV. Choose a separator if automatic detection reads columns incorrectly.</span>
-                  </label>
-                  <fieldset disabled={loading} className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <legend className="mb-3 text-sm font-semibold text-slate-900">Choose what to clean</legend>
-                    {[["clean_headers", "Standardize headers", "Use unique lowercase names with underscores."], ["trim_cells", "Trim cell whitespace", "Remove spaces around values."], ["drop_empty_columns", "Drop empty columns", "Remove columns with only blank cells."], ["remove_duplicates", "Remove duplicate rows", "Keep the first matching row."]].map(([key, label, help]) => (
-                      <label key={key} className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm">
-                        <input type="checkbox" checked={options[key]} onChange={(e) => { setOptions({ ...options, [key]: e.target.checked }); invalidate(); }} className="mt-1" />
-                        <span><span className="block font-medium text-slate-800">{label}</span><span className="text-xs text-slate-500">{help}</span></span>
-                      </label>
-                    ))}
-                  </fieldset>
-                  {options.remove_duplicates && <div className="mt-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-slate-800">
-                        Remove duplicates by columns (optional)
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {selectedList.length ? `${selectedList.length} selected` : "none"}
-                      </div>
-                    </div>
-
-                    {headers.length ? (
-                      <div className="mt-3 grid max-h-64 overflow-y-auto grid-cols-2 gap-2 sm:grid-cols-3">
-                        {headers.map(({ raw, clean }) => (
-                          <label
-                            key={clean}
-                            className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 hover:bg-slate-50"
-                            title={`Sends: ${clean}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selected.has(clean)}
-                              disabled={loading}
-                              onChange={() => toggleCol(clean)}
-                              className="h-4 w-4"
-                            />
-                            <span className="truncate">{raw}</span>
-                          </label>
-                        ))}
-
-                      </div>
-                    ) : (
-                      <div className="mt-2 text-xs text-slate-500">
-                        (Couldn't preview headers - you can still clean the file.)
-                      </div>
-                    )}
-                  </div>}
-                  <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
-                    <div>
-                      <div className="text-sm font-medium text-slate-800">Normalize dates</div>
-                      <div className="text-xs text-slate-500">
-                        Convert year-first dates to YYYY-MM-DD; preserve other values
-                      </div>
-                    </div>
-                    <label className="inline-flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        disabled={loading}
-                        aria-label="Normalize year-first dates"
-                        checked={normalizeDates}
-                        onChange={(e) => { setNormalizeDates(e.target.checked); invalidate(); }}
-                        className="h-4 w-4"
-                      />
-                      <span className="text-slate-700">{normalizeDates ? "On" : "Off"}</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              {error && (
-                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
-              <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
-                <button
-                  onClick={clean}
-                  disabled={loading || !file}
-                  className="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loading ? "Cleaning..." : "Clean & preview"}
-                </button>
-
-                {downloadUrl && (
-                  <a
-                    href={downloadUrl}
-                    download={downloadName}
-                    className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-900 hover:bg-slate-50"
-                  >
-                  Download cleaned CSV
-                </a>
-              )}
-              </div>
-
-              <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                <span aria-hidden="true">↗</span>
-                <span>Files are processed once and never stored.</span>
-              </div>
-
-              {preview && <section aria-label="Before and after preview" className="space-y-4">
-                <p className="text-xs text-slate-500">First 10 rows shown for each version. The download includes every cleaned row. Spaces are preserved in this preview.</p>
-                {[["before", "Original file"], ["after", "Cleaned result"]].map(([key, title]) => (
-                  <div key={key}>
-                    <h2 className="mb-2 text-sm font-semibold text-slate-900">{title}</h2>
-                    <div tabIndex={0} role="region" aria-label={`${title} table, scroll to view all columns`} className="max-h-72 overflow-auto rounded-xl border border-slate-200">
-                      <table className="w-full text-left text-xs">
-                        <caption className="sr-only">{title}, up to ten rows</caption>
-                        <thead className="sticky top-0 bg-slate-100"><tr>{preview[key].columns.map((col, i) => <th key={i} scope="col" className="whitespace-pre border-b border-slate-200 px-3 py-2 font-semibold">{col || "(unnamed)"}</th>)}</tr></thead>
-                        <tbody>{preview[key].rows.map((row, i) => <tr key={i} className="border-b border-slate-100 last:border-0">{row.map((cell, j) => <td key={j} className="px-3 py-2 align-top"><div className="preview-cell">{cell === "" ? <span className="italic text-slate-400">empty</span> : cell}</div></td>)}</tr>)}</tbody>
-                      </table>
-                      {!preview[key].rows.length && <p className="p-3 text-xs text-slate-500">No data rows.</p>}
-                      {!preview[key].columns.length && <p className="p-3 text-xs text-slate-500">All columns were empty. Turn off “Drop empty columns” to retain them.</p>}
-                    </div>
-                  </div>
-                ))}
-              </section>}
-              {stats && (
-                <div role="status" className="mt-2 rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-slate-900">Review your changes</div>
-                    <div className="text-xs text-slate-500">
-                      {stats.originalRows.toLocaleString()}
-                      {" -> "}
-                      {stats.outputRows.toLocaleString()} rows
-                    </div>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <div className="text-xs text-slate-500">Duplicates removed</div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        {stats.duplicatesRemoved.toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <div className="text-xs text-slate-500">Empty columns removed</div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        {stats.emptyColsRemoved.toLocaleString()}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <div className="text-xs text-slate-500">Columns</div>
-                      <div className="text-lg font-semibold text-slate-900">
-                        {stats.originalCols}
-                        {" -> "}
-                        {stats.outputCols}
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <div className="text-xs text-slate-500">Date columns normalized</div>
-                      <div className="text-sm font-medium text-slate-900 break-words">
-                        {stats.normalizedDateCols.length ? stats.normalizedDateCols.join(", ") : "None"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="text-xs text-slate-500">
-                Tip: if you select columns, duplicates are removed based on those columns only.
-              </div>
-            </div>
-          </div>
+              {!file && <button className="sample-button" onClick={() => pickFile(new File(['Name,Email,ID,Empty\n Alice ,alice@example.com,00123, \n Alice ,alice@example.com,00123, \n Bob ,bob@example.com,00456, \n'], 'sample.csv', { type: 'text/csv' }))}>Just exploring? Try sample data <span>→</span></button>}
+              {file && <label className="field-label">File separator<select value={delimiter} disabled={loading} onChange={(e) => { const value = e.target.value; setDelimiter(value); pickFile(file, value); }}><option value="auto">Detect automatically</option><option value=",">Comma (,)</option><option value=";">Semicolon (;)</option><option value={"\t"}>Tab</option></select></label>}
+            </section>
+            <section className={`panel settings-panel ${!file ? "awaiting-file" : ""}`}>
+              <div className="panel-heading"><h2><span className="section-number">02</span>Make it yours</h2><span className="small-label">{Object.values(options).filter(Boolean).length + Number(normalizeDates)} enabled</span></div>
+              <fieldset disabled={!file || loading} className="cleaning-options"><legend className="sr-only">Cleaning options</legend>
+                {[["clean_headers", "Standardize headers", "Consistent names, ready for your next import."], ["trim_cells", "Trim extra spaces", "Remove whitespace around cell values."], ["drop_empty_columns", "Remove empty columns", "Keep only columns that contain data."], ["remove_duplicates", "Remove duplicate rows", "Keep the first matching record."]].map(([key, label, help]) => <label key={key} className="option-row"><span><strong>{label}</strong><small>{help}</small></span><input type="checkbox" role="switch" checked={options[key]} onChange={(e) => { setOptions({ ...options, [key]: e.target.checked }); invalidate(); }} /></label>)}
+                <label className="option-row"><span><strong>Normalize dates <em>OPTIONAL</em></strong><small>Year-first dates to YYYY-MM-DD.</small></span><input type="checkbox" role="switch" checked={normalizeDates} onChange={(e) => { setNormalizeDates(e.target.checked); invalidate(); }} /></label>
+              </fieldset>
+              {file && options.remove_duplicates && <details className="advanced-options"><summary>Match duplicates by column <span>{selectedList.length ? `${selectedList.length} selected` : "All columns"}</span></summary><p>Select key columns, or leave all unchecked to compare complete rows.</p><input className="column-search" type="search" placeholder="Find a column…" aria-label="Search columns" value={columnSearch} onChange={(e) => setColumnSearch(e.target.value)} /><div className="column-list">{filteredHeaders.map(({raw, clean}) => <label key={clean} title={raw}><input type="checkbox" checked={selected.has(clean)} disabled={loading} onChange={() => toggleCol(clean)} /><span>{raw}</span></label>)}{!filteredHeaders.length && <p>No matching columns.</p>}</div></details>}
+            </section>
+            <div className="action-panel">{error && <div role="alert" className="error-message">{error}</div>}<button className="primary-button" onClick={clean} disabled={loading || !file}>{loading ? <><span className="loading-spinner" />Cleaning your file…</> : <>Clean & preview <span aria-hidden="true">→</span></>}</button><p>Processed in memory. Files are never stored.</p></div>
+          </aside>
+          <section className="results-panel panel" aria-label="File review">
+            <div className="panel-heading results-heading"><h2><span className="section-number">03</span>Your clean slate</h2><span className={`result-badge ${preview ? "is-ready" : ""}`}>{preview ? "Ready to download" : "Preview workspace"}</span></div>
+            {!preview ? <div className="empty-preview" aria-live="polite"><div className="sheet-illustration" aria-hidden="true"><div className="sheet-top"><i /><i /><i /></div>{[0,1,2,3].map(i => <div className="sheet-row" key={i}><i /><i /><i /></div>)}<span>✓</span></div><h3>{loading ? "A little tidying in progress." : file ? "Your file. Your rules." : "Good data starts here."}</h3><p>{loading ? "Preparing your cleaned file and comparison." : file ? "Choose your cleaning options, then select Clean & preview to compare the results." : "Upload an export or try the sample. Your original and cleaned data will appear here."}</p><div className="empty-features"><span>Keep leading zeros</span><span>Review before downloading</span></div></div> : <>
+              <div className="metrics" role="status">{[["Rows kept", stats.outputRows.toLocaleString(), `of ${stats.originalRows.toLocaleString()} original`], ["Duplicates removed", stats.duplicatesRemoved.toLocaleString(), "matching rows"], ["Empty columns", stats.emptyColsRemoved.toLocaleString(), "removed"]].map(([label,value,note]) => <div key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>)}</div>
+              <div className="preview-toolbar"><div className="preview-tabs" role="tablist" aria-label="Preview version">{[["after","Cleaned result"],["before","Original file"]].map(([key,label]) => <button key={key} id={`tab-${key}`} role="tab" aria-selected={previewTab === key} aria-controls="data-preview" tabIndex={previewTab === key ? 0 : -1} onKeyDown={(e) => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) { const next = key === "after" ? "before" : "after"; setPreviewTab(next); document.getElementById(`tab-${next}`)?.focus(); } }} onClick={() => setPreviewTab(key)}>{label}</button>)}</div><span>First 10 rows · {preview[previewTab].columns.length} columns</span></div>
+              <div id="data-preview" role="tabpanel" aria-labelledby={`tab-${previewTab}`} tabIndex={0} className="data-preview"><table><caption className="sr-only">{previewTab === "after" ? "Cleaned result" : "Original file"}, first ten rows</caption><thead><tr><th scope="col" className="row-number">#</th>{preview[previewTab].columns.map((col,i) => <th key={i} scope="col">{col || "(unnamed)"}</th>)}</tr></thead><tbody>{preview[previewTab].rows.map((row,i) => <tr key={i}><td className="row-number">{i+1}</td>{row.map((cell,j) => <td key={j}><div className="preview-cell">{cell === "" ? <span className="empty-cell">empty</span> : cell}</div></td>)}</tr>)}</tbody></table>{!preview[previewTab].rows.length && <p className="table-note">No data rows.</p>}{!preview[previewTab].columns.length && <p className="table-note">All columns were empty. Disable empty-column removal to keep them.</p>}</div>
+              <div className="result-footer"><p>Showing a sample. Download includes all {stats.outputRows.toLocaleString()} cleaned rows.<span>Output: comma-separated CSV · {stats.outputCols} columns{stats.normalizedDateCols.length ? ` · Dates: ${stats.normalizedDateCols.join(", ")}` : ""}</span></p><a className="download-button" href={downloadUrl} download={downloadName}>↓ Download CSV</a></div>
+            </>}
+          </section>
         </div>
-
-        <div className="mt-6 text-center text-xs text-slate-600">
-          No signup · Instant download · Files never stored
-        </div>
+        <footer className="workspace-footer"><span>Made for everyday data cleanup.</span><span>Shopify · Etsy · CRM exports · Contact lists</span></footer>
       </div>
     </main>
   );
