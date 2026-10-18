@@ -63,3 +63,6 @@ Choose header standardization, trimming, empty-column removal and duplicate remo
 
 ## Supported separators
 Import UTF-8 `.csv` and `.tsv` files. Comma, semicolon and tab separators are detected from the header record; quoted separators do not count. A File separator selector lets you override detection. TSV files default to tabs. Every download is a comma-separated `.csv` file. Excel `.xlsx` workbooks are not supported.
+
+## Cleaning report
+After cleaning, expand **What changed** to review header mappings, removed columns, duplicate counts, trimmed cells and date conversions. Download the report as JSON. Reports contain filenames and column labels, but no cell values. Cell-operation counts are taken before duplicate removal and are not counts of unique cells.

@@ -95,6 +95,26 @@ class CleaningTests(unittest.TestCase):
         r = self.clean('Name,ID\nAlice,001\n', delimiter='|')
         self.assertEqual(r.status_code, 400)
 
+    def test_report_describes_header_trim_empty_and_duplicates(self):
+        r = self.clean('Full Name,ID,Blank\n Alice ,001, \nAlice,001,\n', preview='true').json
+        report = r['report']
+        self.assertEqual(report['cellsTrimmed'], 2)
+        self.assertEqual(report['rows']['duplicatesRemoved'], 1)
+        self.assertEqual(report['emptyColumnsRemoved'], [{'column': 3, 'name': 'Blank'}])
+        self.assertIn({'column': 1, 'from': 'Full Name', 'to': 'full_name'}, report['headerChanges'])
+        self.assertNotIn('Alice', str(report))
+
+    def test_report_only_counts_dates_that_change(self):
+        r = self.clean('Date\n2026-10-18\n2026/10/19\nunknown\n', preview='true', normalize_dates='true').json
+        self.assertEqual(r['report']['dateCellsChanged'], 1)
+        self.assertEqual(r['report']['dateColumnsChanged'], ['Date'])
+
+    def test_disabled_options_have_zero_reported_changes(self):
+        r = self.clean('Full Name,Blank\n Alice , \n', preview='true', clean_headers='false', trim_cells='false', drop_empty_columns='false', remove_duplicates='false').json
+        self.assertEqual(r['report']['headerChanges'], [])
+        self.assertEqual(r['report']['emptyColumnsRemoved'], [])
+        self.assertEqual(r['report']['cellsTrimmed'], 0)
+
     def test_upload_limit_returns_json(self):
         old = app.config['MAX_CONTENT_LENGTH']
         try:
