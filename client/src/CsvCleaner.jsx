@@ -194,7 +194,7 @@ export default function CsvCleaner() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="csv-cleaner min-h-screen bg-slate-50">
       <div className="mx-auto max-w-3xl px-4 py-10">
         <div className="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
           <div className="p-6 sm:p-8">
@@ -377,7 +377,7 @@ export default function CsvCleaner() {
                       <table className="w-full text-left text-xs">
                         <caption className="sr-only">{title}, up to ten rows</caption>
                         <thead className="sticky top-0 bg-slate-100"><tr>{preview[key].columns.map((col, i) => <th key={i} scope="col" className="whitespace-pre border-b border-slate-200 px-3 py-2 font-semibold">{col || "(unnamed)"}</th>)}</tr></thead>
-                        <tbody>{preview[key].rows.map((row, i) => <tr key={i} className="border-b border-slate-100 last:border-0">{row.map((cell, j) => <td key={j} className="whitespace-pre px-3 py-2">{cell === "" ? <span className="italic text-slate-400">empty</span> : cell}</td>)}</tr>)}</tbody>
+                        <tbody>{preview[key].rows.map((row, i) => <tr key={i} className="border-b border-slate-100 last:border-0">{row.map((cell, j) => <td key={j} className="px-3 py-2 align-top"><div className="preview-cell">{cell === "" ? <span className="italic text-slate-400">empty</span> : cell}</div></td>)}</tr>)}</tbody>
                       </table>
                       {!preview[key].rows.length && <p className="p-3 text-xs text-slate-500">No data rows.</p>}
                       {!preview[key].columns.length && <p className="p-3 text-xs text-slate-500">All columns were empty. Turn off “Drop empty columns” to retain them.</p>}
