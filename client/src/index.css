@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Grid items otherwise keep a wide table's intrinsic minimum width. */
+.csv-cleaner, .csv-cleaner * { min-width: 0; }
+.csv-cleaner input[type="file"] { max-width: 100%; }
+.csv-cleaner fieldset { width: 100%; }
+.csv-cleaner th { max-width: 20rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+.csv-cleaner .preview-cell {
+  width: 16rem;
+  max-width: 60vw;
+  max-height: 6rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.csv-cleaner button:focus-visible, .csv-cleaner a:focus-visible,
+.csv-cleaner select:focus-visible, .csv-cleaner [tabindex]:focus-visible {
+  outline: 2px solid #047857;
+  outline-offset: 3px;
+}
