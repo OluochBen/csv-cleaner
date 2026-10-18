@@ -168,7 +168,7 @@ export default function CsvCleaner() {
       const result = await res.json();
       if (!result.before || !result.after || typeof result.csv !== "string") throw new Error("Preview unavailable. Please try again.");
       setStats(result.stats);
-      setPreview({ before: result.before, after: result.after });
+      setPreview({ before: result.before, after: result.after, report: result.report });
       const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8" });
       const name = result.filename || `cleaned_${file.name}`;
 
@@ -195,6 +195,17 @@ export default function CsvCleaner() {
     setPreview(null);
   };
 
+  const downloadReport = () => {
+    if (!preview?.report) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(preview.report, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = downloadName.replace(/\.csv$/i, "_report.json");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
   const filteredHeaders = headers.filter(({ raw }) => raw.toLowerCase().includes(columnSearch.toLowerCase()));
   return (
     <main className="csv-cleaner workspace">
@@ -242,6 +253,16 @@ export default function CsvCleaner() {
               <div className="metrics" role="status">{[["Rows kept", stats.outputRows.toLocaleString(), `of ${stats.originalRows.toLocaleString()} original`], ["Duplicates removed", stats.duplicatesRemoved.toLocaleString(), "matching rows"], ["Empty columns", stats.emptyColsRemoved.toLocaleString(), "removed"]].map(([label,value,note]) => <div key={label}><span>{label}</span><strong>{value}</strong><small>{note}</small></div>)}</div>
               <div className="preview-toolbar"><div className="preview-tabs" role="tablist" aria-label="Preview version">{[["after","Cleaned result"],["before","Original file"]].map(([key,label]) => <button key={key} id={`tab-${key}`} role="tab" aria-selected={previewTab === key} aria-controls="data-preview" tabIndex={previewTab === key ? 0 : -1} onKeyDown={(e) => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) { const next = key === "after" ? "before" : "after"; setPreviewTab(next); document.getElementById(`tab-${next}`)?.focus(); } }} onClick={() => setPreviewTab(key)}>{label}</button>)}</div><span>First 10 rows · {preview[previewTab].columns.length} columns</span></div>
               <div id="data-preview" role="tabpanel" aria-labelledby={`tab-${previewTab}`} tabIndex={0} className="data-preview"><table><caption className="sr-only">{previewTab === "after" ? "Cleaned result" : "Original file"}, first ten rows</caption><thead><tr><th scope="col" className="row-number">#</th>{preview[previewTab].columns.map((col,i) => <th key={i} scope="col">{col || "(unnamed)"}</th>)}</tr></thead><tbody>{preview[previewTab].rows.map((row,i) => <tr key={i}><td className="row-number">{i+1}</td>{row.map((cell,j) => <td key={j}><div className="preview-cell">{cell === "" ? <span className="empty-cell">empty</span> : cell}</div></td>)}</tr>)}</tbody></table>{!preview[previewTab].rows.length && <p className="table-note">No data rows.</p>}{!preview[previewTab].columns.length && <p className="table-note">All columns were empty. Disable empty-column removal to keep them.</p>}</div>
+              {preview.report && <details className="cleaning-report">
+                <summary>What changed <span>{preview.report.headerChanges.length} headers · {preview.report.cellsTrimmed.toLocaleString()} cells trimmed</span></summary>
+                <div className="report-body">
+                  <div className="report-summary"><span><strong>{preview.report.rows.duplicatesRemoved.toLocaleString()}</strong> duplicate rows removed</span><span><strong>{preview.report.emptyColumnsRemoved.length}</strong> empty columns removed</span><span><strong>{preview.report.dateCellsChanged.toLocaleString()}</strong> date values converted</span></div>
+                  {preview.report.headerChanges.length > 0 && <div><h3>Header changes</h3><ul>{preview.report.headerChanges.map((change) => <li key={change.column}><small>Column {change.column}</small><code>{change.from || "(unnamed)"}</code><span aria-hidden="true">→</span><code>{change.to}</code></li>)}</ul></div>}
+                  {preview.report.emptyColumnsRemoved.length > 0 && <div><h3>Empty columns removed</h3><p>{preview.report.emptyColumnsRemoved.map(col => `${col.name || "(unnamed)"} (column ${col.column})`).join(", ")}</p></div>}
+                  <p className="report-note">Cell changes are counted before removing duplicates and empty columns. A cell may be counted under more than one operation.</p>
+                  <button className="report-download" onClick={downloadReport}>↓ Download report (.json)</button>
+                </div>
+              </details>}
               <div className="result-footer"><p>Showing a sample. Download includes all {stats.outputRows.toLocaleString()} cleaned rows.<span>Output: comma-separated CSV · {stats.outputCols} columns{stats.normalizedDateCols.length ? ` · Dates: ${stats.normalizedDateCols.join(", ")}` : ""}</span></p><a className="download-button" href={downloadUrl} download={downloadName}>↓ Download CSV</a></div>
             </>}
           </section>
