@@ -57,3 +57,6 @@ Locally you can leave it empty because the proxy handles it.
 python -m unittest discover -s server -v
 cd client && npm ci && npm run build
 ```
+
+## Preview and controls
+Choose header standardization, trimming, empty-column removal and duplicate removal independently. Date normalization remains off by default. Select **Clean & preview** to compare the first 10 original and cleaned rows, then download the complete result. Changing options clears the previous result. The API retains CSV responses by default; `preview=true` returns JSON with before/after samples, statistics and the full cleaned CSV.
