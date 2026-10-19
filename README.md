@@ -12,7 +12,7 @@ A focused web app for cleaning CSV and TSV exports, reviewing the changes, and d
 
 ![CSV Cleaner upload, cleaning controls and review workspace](docs/screenshots/workspace.png)
 
-*Workspace reference captured before the latest contrast improvements. The live app has darker text and larger labels. This screenshot contains no uploaded customer data.*
+*Live workspace captured from [csv.splashmaxcreative.com](https://csv.splashmaxcreative.com/) on 19 October 2026. No customer data is shown.*
 
 ## Features
 
