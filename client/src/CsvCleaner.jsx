@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { loadPresets, savePresetList, presetColumns } from "./presets.js";
+
 function bytes(n) {
   if (!n && n !== 0) return "";
   const units = ["B", "KB", "MB", "GB"];
@@ -70,6 +72,10 @@ export default function CsvCleaner() {
   // For local dev, proxy handles it, so empty string works.
   const API = import.meta.env.VITE_API_URL || "";
 
+  const [presets, setPresets] = useState(() => { try { return typeof window === "undefined" ? [] : loadPresets(window.localStorage); } catch { return []; } });
+  const [presetName, setPresetName] = useState("");
+  const [activePreset, setActivePreset] = useState("");
+  const [presetMessage, setPresetMessage] = useState("");
   const [file, setFile] = useState(null);
   const [headers, setHeaders] = useState([]); // [{raw, clean}]
   const [selected, setSelected] = useState(new Set()); // cleaned names
@@ -96,6 +102,7 @@ export default function CsvCleaner() {
   const pickFile = async (f, nextDelimiter = delimiter) => {
     if (!f || loading) return;
     const version = ++pickVersion.current;
+    setActivePreset(""); setPresetMessage("");
     setFile(null);
     setHeaders([]);
     setSelected(new Set());
@@ -120,6 +127,44 @@ export default function CsvCleaner() {
       if (version === pickVersion.current) setHeaders(h);
     } catch {
       if (version === pickVersion.current) setHeaders([]);
+    }
+  };
+
+  const storePresets = (next) => {
+    try { setPresets(savePresetList(window.localStorage, next)); return true; }
+    catch { setError("Your browser could not save presets. Check storage permissions or private browsing settings."); return false; }
+  };
+  const saveCurrentPreset = () => {
+    const name = presetName.trim();
+    if (!name) return setError("Give this preset a name first.");
+    const previous = presets.find(p => p.name.toLowerCase() === name.toLowerCase());
+    if (!previous && presets.length >= 10) return setError("You can save up to 10 presets. Delete one before adding another.");
+    const next = { name, delimiter, normalizeDates, options, columns: [...selected] };
+    if (storePresets([next, ...presets.filter(p => p !== previous)])) {
+      setError(""); setActivePreset(name); setPresetName("");
+      setPresetMessage(previous ? `Updated “${name}”.` : `Saved “${name}” in this browser.`);
+    }
+  };
+  const applyPreset = async (name) => {
+    const preset = presets.find(p => p.name === name);
+    if (!preset || !file || loading) return;
+    const version = ++pickVersion.current;
+    setLoading(true); setError(""); setPresetMessage(""); invalidate();
+    try {
+      const nextHeaders = await readCsvHeaders(file, preset.delimiter);
+      if (version !== pickVersion.current) return;
+      const columns = presetColumns(preset, nextHeaders);
+      setDelimiter(preset.delimiter); setHeaders(nextHeaders);
+      setOptions({ ...preset.options }); setNormalizeDates(preset.normalizeDates);
+      setSelected(new Set(columns)); setActivePreset(name); setColumnSearch("");
+      setPresetMessage(`Applied “${name}”. Review the options before cleaning.`);
+    } catch (e) { if (version === pickVersion.current) setError(e.message || "Could not apply this preset."); }
+    finally { setLoading(false); }
+  };
+  const deletePreset = () => {
+    if (storePresets(presets.filter(p => p.name !== activePreset))) {
+      setPresetMessage(`Deleted “${activePreset}”. Current cleaning options are unchanged.`);
+      setActivePreset(""); setError("");
     }
   };
 
@@ -228,6 +273,13 @@ export default function CsvCleaner() {
             </section>
             <section className={`panel settings-panel ${!file ? "awaiting-file" : ""}`}>
               <div className="panel-heading"><h2><span className="section-number">02</span>Make it yours</h2><span className="small-label">{Object.values(options).filter(Boolean).length + Number(normalizeDates)} enabled</span></div>
+              {file && <details className="preset-settings">
+                <summary>Saved cleaning presets <span>{presets.length}/10</span></summary>
+                <p>Save settings for recurring exports. Stored only in this browser; no files or cell values are saved.</p>
+                {presets.length > 0 && <div className="preset-apply"><label className="field-label">Apply a preset<select disabled={loading} value="" onChange={(e) => applyPreset(e.target.value)}><option value="">Choose saved settings…</option>{presets.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}</select></label>{activePreset && presets.some(p => p.name === activePreset) && <button className="text-button" disabled={loading} onClick={deletePreset}>Delete “{activePreset}”</button>}</div>}
+                <form onSubmit={(e) => { e.preventDefault(); saveCurrentPreset(); }}><label className="field-label" htmlFor="preset-name">Save current settings<input id="preset-name" maxLength={40} disabled={loading} value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder="e.g. Monthly customer export" /></label><button className="preset-save" disabled={loading || !presetName.trim()} type="submit">{presets.some(p => p.name.toLowerCase() === presetName.trim().toLowerCase()) ? "Update preset" : "Save preset"}</button></form>
+                {presetMessage && <p role="status" className="preset-message">{presetMessage}</p>}
+              </details>}
               <fieldset disabled={!file || loading} className="cleaning-options"><legend className="sr-only">Cleaning options</legend>
                 {[["clean_headers", "Standardize headers", "Consistent names, ready for your next import."], ["trim_cells", "Trim extra spaces", "Remove whitespace around cell values."], ["drop_empty_columns", "Remove empty columns", "Keep only columns that contain data."], ["remove_duplicates", "Remove duplicate rows", "Keep the first matching record."]].map(([key, label, help]) => <label key={key} className="option-row"><span><strong>{label}</strong><small>{help}</small></span><input type="checkbox" role="switch" checked={options[key]} onChange={(e) => { setOptions({ ...options, [key]: e.target.checked }); invalidate(); }} /></label>)}
                 <label className="option-row"><span><strong>Normalize dates <em>OPTIONAL</em></strong><small>Year-first dates to YYYY-MM-DD.</small></span><input type="checkbox" role="switch" checked={normalizeDates} onChange={(e) => { setNormalizeDates(e.target.checked); invalidate(); }} /></label>
