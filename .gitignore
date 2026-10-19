@@ -15,3 +15,37 @@ client/dist/
 
 # Build artifacts
 *.pyc
+
+# Local environment variants (keep deliberately sanitised examples trackable)
+.env.*
+!.env.example
+!.env.*.example
+
+# Private exports, uploaded data and database copies
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+/uploads/
+/exports/
+/backups/
+/data/
+
+# Permit reviewed synthetic fixtures only
+!tests/fixtures/*.csv
+!tests/fixtures/*.tsv
+!server/tests/fixtures/*.csv
+!server/tests/fixtures/*.tsv
+
+# Private keys and local credentials
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
