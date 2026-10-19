@@ -96,3 +96,5 @@
   .workspace .option-row strong { font-size: 13px; }
   .workspace .preview-toolbar { gap: 12px; }
 }
+
+.preset-settings{margin-bottom:22px;padding:14px;border:1px solid #cedbd4;border-radius:9px;background:#f5faf7}.preset-settings summary{font-size:13px;font-weight:600;cursor:pointer;color:#244d3b}.preset-settings summary span{float:right;font-size:11px;color:#52635d}.preset-settings p{font-size:11px;line-height:1.7;color:#52635d;margin-top:10px}.preset-settings .field-label{margin-top:12px}.preset-settings input{display:block;width:100%;border:1px solid #bccfc3;background:white;color:#172b26;padding:10px;border-radius:6px;font-size:12px;margin-top:7px}.preset-save{border:1px solid #146c4e;color:#146c4e;background:white;padding:8px 12px;font-size:12px;border-radius:6px;margin-top:10px}.preset-save:hover:not(:disabled){background:#e7f4ed}.preset-apply .text-button{display:block;margin-top:10px;color:#8b3c2b;text-align:left;overflow-wrap:anywhere}.preset-settings .preset-message{color:#146c4e;font-weight:500}
