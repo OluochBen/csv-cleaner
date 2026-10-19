@@ -12,8 +12,6 @@ A focused web app for cleaning CSV and TSV exports, reviewing the changes, and d
 
 ![CSV Cleaner upload, cleaning controls and review workspace](docs/screenshots/workspace.png)
 
-*Live workspace captured from [csv.splashmaxcreative.com](https://csv.splashmaxcreative.com/) on 19 October 2026. No customer data is shown.*
-
 ## Features
 
 - Upload UTF-8 CSV and TSV files up to 20 MB.
